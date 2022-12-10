@@ -28,8 +28,8 @@ class Ecommerce(Application):
 
     # TODO: Add id for stbl coint v2 algofi and algo
 
-    __USDC = 4                  # Asset ID for USDC
-    __USDT = 5                  # Asset ID for USDT
+    __USDC = 1                  # Asset ID for USDC
+    __USDT = 2                  # Asset ID for USDT
     __STBL = 10                 # TODO: Create the stable coin in the sandbox
     # Define constans variables for the balance structure
     __MAX_DEPOSIT_TOKENS = 6    # The smart contract will support only 7 different tokens
@@ -183,7 +183,7 @@ class Ecommerce(Application):
     @external(authorize=Authorize.only(Global.creator_address()))
     def setup(self,
               t: abi.PaymentTransaction,
-              *,output:abi.String):
+              *,output:abi.Uint64):
         """
         The application receive some algos, and create the seller license nft
         """
@@ -208,7 +208,7 @@ class Ecommerce(Application):
             }),
             InnerTxnBuilder.Submit(),
             self.license_id.set(InnerTxn.created_asset_id()),
-            output.set("setup_successfull")
+            output.set(self.license_id)
         )
     @external(authorize=Authorize.only(Global.creator_address()))
     def addFundBoxAlgoBalance(
