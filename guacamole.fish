@@ -41,7 +41,6 @@ function menuTitle
     set_color normal
 end
 
-
 function cleanCache
     # remove the cache file
     rm $cache
@@ -85,6 +84,17 @@ function optInAsset
     $s goal asset optin -a $addr --assetid $asset
 end
 
+function optInApp
+    set -l addr $argv[1]
+    if test -e $smartcontract
+        set -l data (cat $smartcontract | awk '{if($1 == "app_id") print$0}')
+        set -l app (string split ' ' $data)
+        $s goal app optin --app-id $app[2] -f $addr
+        echo "$addr Opted-in app:$app[2]"
+    else
+        echo "No smartcontract deployed"
+    end
+end
 function sendAsset
     set -l from $argv[1]
     set -l to $argv[2]
@@ -97,6 +107,11 @@ function deployContract
     # Deploy the smartcontract
     set -l t (cat $tokens | awk '{print $2}')
     python deploy.py $t > $smartcontract
+    echo ""
+    echo "Application has been deployed"
+    cat $smartcontract
+    echo ""
+    echo "Pres any key to continue..."
 end
 
 function updateContract
@@ -104,6 +119,10 @@ function updateContract
         set -l data (cat $smartcontract | awk '{if($1 == "app_id") print$0}')
         set -l app (string split ' ' $data)
         python update.py $app[2]
+        echo ""
+        echo "Application has been updated"
+        echo ""
+        echo "Pres any key to continue..."
     else
         echo "No smartcontract deployed"
     end
@@ -210,6 +229,8 @@ function subMenuResetApp
     clear
 
     # SELLER ACCOUNT
+    # --------------
+
     title " -- Opt-in USDC - $accounts[$SELLER]"
     sleep 3
     optInAsset $accounts[$SELLER] $usdc
@@ -225,12 +246,14 @@ function subMenuResetApp
     optInAsset $accounts[$SELLER] $usdt
     clear
 
-    title " -- Sending USDC - $accounts[$SELLER]"
+    title " -- Sending USDT - $accounts[$SELLER]"
     sleep 3
     sendAsset $accounts[$ADMIN] $accounts[$SELLER] $usdt 100000000000
     clear
 
     # BUYER ACCOUNT
+    #---------------
+
     title " -- Opt-in USDC - $accounts[$BUYER]"
     sleep 3
     optInAsset $accounts[$BUYER] $usdc
@@ -246,11 +269,28 @@ function subMenuResetApp
     optInAsset $accounts[$BUYER] $usdt
     clear
 
-    title " -- Sending USDC - $accounts[$BUYER]"
+    title " -- Sending USDT - $accounts[$BUYER]"
     sleep 3
     sendAsset $accounts[$ADMIN] $accounts[$BUYER] $usdt 100000000000
     clear
 
+    # App Deploy
+    #-----------
+
+    title " -- Deploying SmartContract"
+    sleep 3
+    deployContract
+    clear
+
+    title " -- Opt-in APP - $accounts[$SELLER]"
+    sleep 3
+    optInApp $accounts[$SELLER]
+    clear
+
+    title " -- Opt-in APP - $accounts[$BUYER]"
+    sleep 3
+    optInApp $accounts[$BUYER]
+    clear
 
 end
 
@@ -261,7 +301,7 @@ function subMenuSmartContractApp
         clear
         title "-- SmartContract App Menu --"
         menuTitle "1) Deploy APP"
-        menuTitle "2) Udate APP"
+        menuTitle "2) Update APP"
         menuTitle "3) Show APP ID | APP ADDR | APP LICENSE"
         menuTitle "4) App Info"
         menuTitle "5) App Global State"
@@ -279,11 +319,12 @@ function subMenuSmartContractApp
             clear
             title "-- Updating smartcontract ..."
             updateContract
-
+            read
         else if test $input -eq 3
             clear
             title "-- Application Config"
             cat $smartcontract
+            echo ""
             read
         else if test $input -eq 4
             clear
