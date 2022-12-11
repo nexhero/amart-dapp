@@ -5,7 +5,7 @@ set -g cache "$temp/cache"              # Cache file
 set -g smartcontract "$temp/smartcontract"
 set -g tokens "$temp/tokens"
 set -g s "sandbox/./sandbox"
-
+set -g ptest smartcontract/test_calls.py
 # DEFINE accounts type based in the index
 set -g ADMIN 1
 set -g SELLER 2
@@ -177,6 +177,25 @@ function appBalance
         echo "No smartcontract deployed"
     end
 end
+
+function getTestFunctions
+    set -l account $argv[1]
+    cat $ptest | grep -h test_$account | awk '{print$2}' | string split '(' | grep -h test_$account
+
+end
+function runTestFunctions
+    set -l f $argv[1]
+    set -l t (cat $tokens | awk '{print $2}')
+    set -l app (cat $smartcontract | awk '{print$2}')
+    clear
+    title "-- Testing function::$f"
+    if test $f = 'all'
+        pytest -q --usdc=$t[1] --usdt=$t[2] --appid=$app[1] --appaddr=$app[2] --al=$app[3] $ptest -s
+    else
+        pytest -q --usdc=$t[1] --usdt=$t[2] --appid=$app[1] --appaddr=$app[2] --al=$app[3] $ptest::$f -s
+    end
+end
+
 #####################
 # Load the accounts #
 #####################
@@ -347,6 +366,60 @@ function subMenuSmartContractApp
         end
     end
 end
+
+function subMenuTestAccountFunctions
+    set -l account $argv[1]
+    set -l input 1
+    set -l fs (getTestFunctions $account)
+    while test $input -gt 0
+        set -l i 1
+        set input 0
+        clear
+        title "-- Testing functions for $account"
+        for f in $fs
+            menuTitle "$i) $f"
+            set i (math $i + 1)
+        end
+        read input
+
+        if test $input -gt 0
+            runTestFunctions $f
+            read
+        else
+            clear
+        end
+    end
+end
+function subMenuTestApp
+    set -l input 1
+    while test $input -gt 0
+        clear
+        title "-- Test Application"
+        menuTitle "1) Admin Functions"
+        menuTitle "2) Seller Functions"
+        menuTitle "3) Buyer Functions"
+        menuTitle "4) Test All"
+        menuTitle "5) Back"
+        echo ""
+        read input
+        if test $input -eq 1
+            subMenuTestAccountFunctions "admin"
+        else if test $input -eq 2
+            subMenuTestAccountFunctions "seller"
+
+        else if test $input -eq 3
+            subMenuTestAccountFunctions "buyer"
+
+        else if test $input -eq 4
+            runTestFunctions "all"
+            read
+        else
+            clear
+        end
+    end
+
+
+end
 function mainMenuApp
     set -l input 1
     while test $input -gt 0
@@ -354,7 +427,8 @@ function mainMenuApp
         title "-- APPLICATION MENU --"
         menuTitle "1) Accounts"
         menuTitle "2) Application"
-        menuTitle "3) Reset"
+        menuTitle "3) Test"
+        menuTitle "4) Reset"
         menuTitle "0) Exit"
         echo ""
         read input
@@ -364,8 +438,9 @@ function mainMenuApp
         else if test $input -eq 2
             subMenuSmartContractApp
         else if test $input -eq 3
+            subMenuTestApp
+        else if test $input -eq 4
             subMenuResetApp
-
         else
             clear
             return 0
@@ -376,12 +451,4 @@ end
 
 
 
-
-set -l o $argv[1]
-
-if test "$o" = "app"
-    clear
-    mainMenuApp
-else
-    echo "Bye"
-end
+mainMenuApp
