@@ -1,0 +1,106 @@
+#+TITLE: Ecommerce Smart Contract
+
+* Assets
+** TODO Seller License NFT
+** TODO aMart Observer NFT
+** TODO aMart rewards tokens
+
+* Global Variables
+*** DONE Order
+Define the order structure that will store into a box.
++ Order ID
++ Seller Address
++ Buyer Address
++ Status
++ Status
++ Token
++ Amount
++ Commission
+*** DONE Earnings
+Store into a box
++ Algos
++ USDC
++ USDT
++ STBL2
+*** DONE License Price
+The cost for an user that wish to become a seller.
+*** DONE License NFT ID
+Save the asset id that represent the license.
+*** DONE Commission Cost
+Cost that smartcontract charged to the seller per item sold.
+*** DONE aMart Observer NFT ID
+*** DONE Requests Fees
+Cost that user pay for sending request to the private oracle.
+*** DONE Active Box Orders
+Count the active ordes
+*** DONE Maintance
+Define if the smart contract is in maintance. suspend all transactions
+*** TODO Wait User Update Until
+how many days to wait before to auto-process the order.
+*** TODO Create Boxe to manage earning balance
+
+* Local Variables
+
+* Internal Functions
+** DONE IsObserver
+Check if the sender is an observer
+** DONE IsAdmin
+** DONE IsSeller
+Check if the sender is a seller account
+** DONE getAssetIndex
+** DONE incrementBalanceAssetIndex
+** DONE decrementBalanceAssetIndex
+** [?] CountOrdersIncrement
+Increment the count for current active orders
+** [?] CountORdersDecrement
+Decrement the count for current active orders
+** DONE OrderExists
+Check if the order already exist
+** DONE CreateBoxOrder
+Create a new order box
+** [?] DeleteBoxOrder
+Delete an order box
+** [?] AddrIsBuyerInOrder
+Check if the sender is the buyer address for the order
+** [?] AddrIsSellerInOrder
+Check if the sender is the seller address for the order
+** [?] SendStblCoinTo
+Generic function to send stable coins or the rewards tokens to an address
+** TODO CalculateCommission
+
+* Admin
+** DONE withdrawEarnings
+The creator of the smartcontract withdraw earning that the app made.
+** DONE addFundsEarning
+** DONE CreateOrder
+Observers process ordes sent by buyers and create order structures in the blockchain
+** TODO MediateOrder
+Administrator resolve if one of the user didn't submit their final state.
+** TODO SuspendSeller
+Administrator can ban seller for bad behaivor
+** TODO SetCommission
+Set commission that dapp charges for every product sold.
+** TODO SetLicensePrice
+Set the price for becoming a seller
+** TODO SetObserverFees
+The cost in algos for processing transactions
+** TODO SetAddrAsObserver
+Set an address to become observer for orders requests
+** TODO RemoveObserver
+Remove the observer nft to invalidate an address to keep processing orders
+** TODO SetAutoProcessDelay
+Set the time for auto-processing orders
+
+
+* Buyer
+** DONE payOrder
+** TODO CompletedOrder
+** TODO CanceledOrder
+** TODO RequestCancelOrder
+
+* Seller
+** DONE payLicense
+** TODO CompletedOrder
+** TODO AcceptedOrder
+** TODO RejectedOrder
+** TODO CanceledOrder

@@ -194,6 +194,10 @@ function runTestFunctions
     else
         pytest -q --usdc=$t[1] --usdt=$t[2] --appid=$app[1] --appaddr=$app[2] --al=$app[3] $ptest::$f -s
     end
+    echo ""
+    echo "Test completed, press any key to continue..."
+    echo ""
+    read
 end
 
 #####################
@@ -311,6 +315,11 @@ function subMenuResetApp
     optInApp $accounts[$BUYER]
     clear
 
+    title " -- Opt-in License  - $accounts[$SELLER]"
+    sleep 3
+    $s goal asset optin --assetid 14 -a $accounts[$SELLER]
+    clear
+
 end
 
 function subMenuSmartContractApp
@@ -373,18 +382,16 @@ function subMenuTestAccountFunctions
     set -l fs (getTestFunctions $account)
     while test $input -gt 0
         set -l i 1
-        set input 0
         clear
         title "-- Testing functions for $account"
         for f in $fs
             menuTitle "$i) $f"
             set i (math $i + 1)
         end
-        read input
 
+        read input
         if test $input -gt 0
-            runTestFunctions $f
-            read
+            runTestFunctions $fs[$input]
         else
             clear
         end
@@ -412,7 +419,6 @@ function subMenuTestApp
 
         else if test $input -eq 4
             runTestFunctions "all"
-            read
         else
             clear
         end
