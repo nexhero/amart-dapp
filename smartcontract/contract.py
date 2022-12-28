@@ -30,7 +30,8 @@ class Ecommerce(Application):
     ################################################
 
     __REQUEST_FEES = 1000       #Default fees for making request to the observer application.
-    __COMMISSION_FEES = 1        # Default commission
+    # TODO: Commission probably will calculate in the server side
+    __COMMISSION_FEES = 135        # Default commission
     __LICENSE_COST = 4000        # Default price for buying a license
 
     ##########################################
@@ -38,7 +39,7 @@ class Ecommerce(Application):
     ##########################################
     __USDC = 1                  # Asset ID for USDC
     __USDT = 2                  # Asset ID for USDT
-    __STBL2 = 10                # Create the stable coin in the sandbox
+    __STBL2 = 10                # TODO: Create the stable coin in the sandbox
 
     #######################################################
     # Define constans variables for the balance structure #
@@ -52,12 +53,11 @@ class Ecommerce(Application):
     #####################################################
     # Define constans variables for the order structure #
     #####################################################
-    ORDER_POSTED = 0            # Buyer made an order
-    ORDER_PENDING = 1           # Seller order initial state
-    ORDER_ACCEPTED = 2          # Buyer/Seller accepted the order
-    ORDER_CANCELED = 3          # Buyer/Seller Canceled the order
-    ORDER_REJECTED = 4          # Seller Rejected the order
-    ORDER_COMPLETED = 5          # Seller completed order
+    ORDER_BUYER_POSTED = 0
+    ORDER_BUYER_CANCEL = 1
+
+    ORDER_SELLER_PENDING = 0
+    ORDER_SELLER_ACCEPTED = 1
 
     ###########################################
     # DEFINE STRUCTURES FOR THE SMARTCONTRACT #
@@ -91,7 +91,7 @@ class Ecommerce(Application):
     commission_fees: Final[ApplicationStateValue] = ApplicationStateValue(
         stack_type=TealType.uint64,
         key=Bytes("cf"),
-        default=Int(__COMMISSION_FEES),
+        default=Int( __COMMISSION_FEES),
         descr="Fees charged for product."
     )
     """Store the fees that users pay for the products"""
@@ -159,6 +159,13 @@ class Ecommerce(Application):
         key=Bytes("debug_b"),
     )
 
+    # Local Variables
+    user_balance: Final[ReservedAccountStateValue] = ReservedAccountStateValue(
+        stack_type = TealType.uint64,
+        max_keys = __MAX_DEPOSIT_TOKENS,
+        descr = "Store refunds tokens."
+    )
+
     order_records = Mapping(abi.Byte, Order)
     """Represent the active ordes in the smart contract."""
 
@@ -181,6 +188,21 @@ class Ecommerce(Application):
         )
 
     @internal(TealType.uint64)
+    def incrementUserBalance(self,addr: abi.Address, amount: abi.Uint64,token:abi.Uint64):
+        """Increment the temp balance for a buyer addr"""
+        current_balance = abi.make(abi.Uint64)
+        k = abi.make(abi.Uint8)
+
+        return Seq(
+
+            k.set(self.getAssetIndex(token)),
+            current_balance.set(self.user_balance[k][addr.get()]),
+            self.user_balance[k][addr.get()].set(current_balance.get()+amount.get()),
+            Return(self.user_balance[k][addr.get()])
+
+        )
+
+    @internal(TealType.uint64)
     def incrementBalanceAssetIndex(self,amount: abi.Uint64,token:abi.Uint64):
         """Increment the earning's balance for a token"""
         current_balance = abi.make(abi.Uint64)
@@ -190,6 +212,20 @@ class Ecommerce(Application):
             current_balance.set(self.earning[k]),
             self.earning[k].set(current_balance.get()+amount.get()),
             Return(self.earning[k])
+        )
+
+    @internal(TealType.uint64)
+    def decrementUserBalance(self,addr: abi.Address,amount: abi.Uint64,token:abi.Uint64):
+        """Decrement the user balance for a token"""
+        current_balance = abi.make(abi.Uint64)
+        k = abi.make(abi.Uint8)
+        return Seq(
+            k.set(self.getAssetIndex(token)),
+            Assert(amount.get() <= self.user_balance[k][addr.get()]),
+            current_balance.set(self.user_balance[k][addr.get()]),
+            current_balance.set(current_balance.get() - amount.get()),
+            self.user_balance[k][addr.get()].set(current_balance.get()),
+            Return(self.user_balance[k][addr.get()])
         )
     @internal(TealType.uint64)
     def decrementBalanceAssetIndex(self,amount: abi.Uint64,token:abi.Uint64):
@@ -234,7 +270,7 @@ class Ecommerce(Application):
         )
     @internal(TealType.uint64)
     def isSeller(self):
-        """Cehck if the address is a seller account."""
+        """Check if the address is a seller account."""
         r = AssetHolding.balance(Txn.sender(),self.license_nft_id)
         return Seq(
             r,
@@ -272,21 +308,24 @@ class Ecommerce(Application):
             self.countOrderIncrement(),
         )
     @internal(TealType.none)
-    def deleteBoxOrder(self, id: abi.String):
+    def deleteBoxOrder(self, k:abi.String):
         """Delete a order box using box key"""
+        r = abi.make(abi.Uint64)
         return Seq(
-            Assert(self.orderExists(id) ,comment=EcommerceMessage.ERROR_ORDER_DONT_EXIST),
-            MapElement(id.get(), self.Order).delete(),
+            # TODO: Apply logic to send tokens to the seller and increment the earning balance for the smartcontract
+            Assert(self.orderExists(k) ,comment=EcommerceMessage.ERROR_ORDER_DONT_EXIST),
+            r.set( self.order_records[k.get()].delete()),
             self.countOrderDecrement(),
         )
     @internal(TealType.uint64)
-    def addrIsBuyerInOrder(self,id: abi.String):
+    def addrIsBuyerInOrder(self,k: abi.String):
         """Check if the sender is the buyer for a specific order"""
-        o = Order
+        addr = abi.make(abi.Address)
         return Seq(
-            Assert(self.orderExists(id.get()),comment=EcommerceMessage.ERROR_ORDER_EXIST),
-            self.order_records[id.get()].store_into(o),
-            If(o.buyer == Txn.sender())
+            Assert(self.orderExists(k),comment=EcommerceMessage.ERROR_ORDER_DONT_EXIST),
+            (o := Ecommerce.Order()).decode(self.order_records[k.get()].get()),
+            o.buyer.store_into(addr),
+            If(addr.get() == Txn.sender())
             .Then(
                 Return(Int(1))
             )
@@ -295,13 +334,15 @@ class Ecommerce(Application):
             )
         )
     @internal(TealType.uint64)
-    def addrIsSellerInOrder(self, id: abi.String):
+    def addrIsSellerInOrder(self, k: abi.String):
         """Check if the sender is the seller for a specific order"""
-        o = Order
+
+        addr = abi.make(abi.Address)
         return Seq(
-            Assert(self.orderExists(id.get()),comment=EcommerceMessage.ERROR_ORDER_EXIST),
-            self.order_records[id.get()].store_into(o),
-            If(o.seller == Txn.sender())
+            Assert(self.orderExists(k),comment=EcommerceMessage.ERROR_ORDER_DONT_EXIST),
+            (o := Ecommerce.Order()).decode(self.order_records[k.get()].get()),
+            o.seller.store_into(addr),
+            If(addr.get() == Txn.sender())
             .Then(
                 Return(Int(1))
             )
@@ -309,6 +350,17 @@ class Ecommerce(Application):
                 Return(Int(0))
             )
         )
+    @internal(TealType.uint64)
+    def getOrderSellerState(self, k: abi.String):
+        """Get the current seller's state for the order."""
+        state = abi.make(abi.Uint8)
+        return Seq(
+            Assert(self.orderExists(k),comment=EcommerceMessage.ERROR_ORDER_DONT_EXIST),
+            (o := Ecommerce.Order()).decode(self.order_records[k.get()].get()),
+            o.seller_state.store_into(state),
+            Return(state.get())
+        )
+
     @internal(TealType.none)
     def sendStblCoinTo(self,
                        _to,
@@ -328,6 +380,114 @@ class Ecommerce(Application):
             }),
             InnerTxnBuilder.Submit()
         )
+    @internal(TealType.none)
+    def updateSellerOrderState(self, k: abi.String, value: abi.Uint8):
+        """Seller update state"""
+        seller=abi.make(abi.Address)
+        buyer=abi.make(abi.Address)
+        amount=abi.make(abi.Uint64)
+        token=abi.make(abi.Uint64)
+        buyer_state=abi.make(abi.Uint8)
+        return Seq(
+            (order := Ecommerce.Order()).decode(self.order_records[k.get()].get()),
+
+            order.seller.store_into(seller),
+            order.buyer.store_into(buyer),
+            order.amount.store_into(amount),
+            order.token.store_into(token),
+            order.buyer_state.store_into(buyer_state),
+
+            (updated_order := Ecommerce.Order()).set(
+                seller,
+                buyer,
+                amount,
+                token,
+                value,
+                buyer_state,
+            ),
+            self.order_records[k.get()].set(updated_order),
+        )
+
+    @internal(TealType.none)
+    def updateBuyerOrderState(self, k: abi.String, value: abi.Uint8):
+        """Buyer update state"""
+        seller=abi.make(abi.Address)
+        buyer=abi.make(abi.Address)
+        amount=abi.make(abi.Uint64)
+        token=abi.make(abi.Uint64)
+        seller_state= abi.make(abi.Uint8)
+        return Seq(
+            (order := Ecommerce.Order()).decode(self.order_records[k.get()].get()),
+
+            order.seller.store_into(seller),
+            order.buyer.store_into(buyer),
+            order.amount.store_into(amount),
+            order.token.store_into(token),
+            order.seller_state.store_into(seller_state),
+
+            (updated_order := Ecommerce.Order()).set(
+                seller,
+                buyer,
+                amount,
+                token,
+                seller_state,
+                value,
+            ),
+            self.order_records[k.get()].set(updated_order),
+        )
+
+    @internal(TealType.uint64)
+    def calcCommission(self, v: abi.Uint64):
+        r = ScratchVar(TealType.uint64)
+
+        return Seq(
+            r.store((v.get() /  Int(10000)) * self.commission_fees),
+            Return(r.load())
+        )
+
+    @internal(TealType.none)
+    def payoutSeller(self,k: abi.String):
+        """Payout to the seller"""
+        c = abi.make(abi.Uint64) # Store the commission for the order
+        t = abi.make(abi.Uint64)
+        amount = abi.make(abi.Uint64)
+        commission = abi.make(abi.Uint64)
+        deposit = abi.make(abi.Uint64)
+        addr = abi.make(abi.Address)
+        r = abi.make(abi.Uint64) # the increment function has a return value
+        return Seq(
+            Assert(self.orderExists(k), comment=EcommerceMessage.ERROR_ORDER_DONT_EXIST),
+            (o := Ecommerce.Order()).decode(self.order_records[k.get()].get()),
+            o.token.store_into(t),
+            o.amount.store_into(amount),
+            o.seller.store_into(addr),
+            commission.set(self.calcCommission(amount)),
+            deposit.set(amount.get()-commission.get()),
+            r.set(self.incrementUserBalance(addr,deposit,t)),
+            self.deleteBoxOrder(k)
+
+        )
+    @internal(TealType.none)
+    def refundBuyer(self,k:abi.String):
+        """Refund token to the buyer user"""
+        t = abi.make(abi.Uint64)
+        amount = abi.make(abi.Uint64)
+        deposit = abi.make(abi.Uint64)
+        addr = abi.make(abi.Address)
+        r = abi.make(abi.Uint64) # the increment function has a return value
+        return Seq(
+            Assert(self.orderExists(k), comment=EcommerceMessage.ERROR_ORDER_DONT_EXIST),
+            (o := Ecommerce.Order()).decode(self.order_records[k.get()].get()),
+            o.token.store_into(t),
+            o.amount.store_into(amount),
+            o.buyer.store_into(addr),
+            r.set(self.incrementUserBalance(addr,amount,t)),
+            self.deleteBoxOrder(k)
+        )
+
+    #######################
+    # END UTILS FUNCTIONS #
+    #######################
 
     #####################
     # DEFAULT FUNCTIONS #
@@ -347,6 +507,7 @@ class Ecommerce(Application):
     def opt_in(self):
         """Account registered into the smartcontract"""
         return Seq(
+            # TODO: Set user_balance to zero
             self.initialize_account_state(),
         )
 
@@ -467,7 +628,7 @@ class Ecommerce(Application):
         )
     @external
     def createOrder(self,
-                    id: abi.String,
+                    k: abi.String,
                     order: Order,
                     nft_observer: abi.Asset,
                     *,output: abi.String):
@@ -480,8 +641,47 @@ class Ecommerce(Application):
                 ),
                 comment= EcommerceMessage.ERROR_INVALID_CREDENTIALS
             ),
-            self.createBoxOrder(id,order),
+            self.createBoxOrder(k,order),
             output.set(EcommerceMessage.Ok_ORDER_CREATED)
+        )
+    @external
+    def adminPayoutBuyer(self,
+                         k:abi.String,
+                         *,output: abi.String):
+        return Seq(
+            Assert(             # -- Only a validate address can call this method
+                Or(
+                    self.isAdmin(),
+                    self.isObserver(),
+                ),
+                comment = EcommerceMessage.ERROR_INVALID_CREDENTIALS,
+            ),
+            self.payoutSeller(k),
+            output.set(EcommerceMessage.OK_PAYOUT_SELLER)
+        )
+
+    @external(authorize=Authorize.only(Global.creator_address()))
+    def setCommisionFees(self, v: abi.Uint64,*,output: abi.Uint64):
+        """Administrator update the commission value"""
+        return Seq(
+            self.commission_fees.set(v.get()),
+            output.set(self.commission_fees)
+        )
+
+    @external(authorize=Authorize.only(Global.creator_address()))
+    def setLicensePrice(self, v: abi.Uint64,*,output: abi.Uint64):
+        """Administrator update the price for nft"""
+        return Seq(
+            self.license_price.set(v.get()),
+            output.set(self.license_price)
+        )
+
+    @external(authorize=Authorize.only(Global.creator_address()))
+    def setObserverFees(self, v: abi.Uint64,*,output: abi.Uint64):
+        """Administrator update the fees that user paid for making request """
+        return Seq(
+            self.request_fees.set(v.get()),
+            output.set(self.request_fees)
         )
 
     #######################
@@ -534,9 +734,14 @@ class Ecommerce(Application):
                  product_pay: abi.AssetTransferTransaction,
                  *, output: abi.String):
         """A buyer send the payment to the smartcontract, the private oracle will validate the payment"""
-
+        amount = abi.make(abi.Uint64)
+        token = abi.make(abi.Uint64)
+        balance = abi.make(abi.Uint64)
         return Seq(
             # Validate input data
+            amount.set(product_pay.get().asset_amount()),
+            token.set(product_pay.get().xfer_asset()),
+
             Assert(
                 oracle_pay.get().amount() >= self.request_fees,
                 comment= EcommerceMessage.ERROR_WRONG_AMOUNT_FEES
@@ -562,4 +767,74 @@ class Ecommerce(Application):
                 comment=EcommerceMessage.ERROR_INVALID_TOKEN
             ),
             output.set(EcommerceMessage.OK_PAYMENT_SUCCESSFULL)
+        )
+    @external(read_only=True)
+    def checkUserBalance(self, a:abi.Asset,*, output: abi.Uint64):
+        a_id = abi.make(abi.Uint64)
+        k = abi.make(abi.Uint8)
+        return Seq(
+            a_id.set(a.asset_id()),
+            k.set(self.getAssetIndex(a_id)),
+            output.set(self.user_balance[k][Txn.sender()])
+        )
+
+    @external
+    def sellerAcceptOrder(self,
+                          k: abi.String,
+                          license: abi.Asset,
+                          *,output:abi.String):
+        """Seller update state to be accepted for a specific order"""
+        new_state = abi.make(abi.Uint8)
+        return Seq(
+            Assert(self.orderExists(k), comment=EcommerceMessage.ERROR_ORDER_DONT_EXIST),
+            Assert(self.isSeller(),comment=EcommerceMessage.ERROR_USER_IS_NOT_SELLER),
+            Assert(self.addrIsSellerInOrder(k),comment=EcommerceMessage.ERROR_INVALID_SELLER_ADDR_ORDER),
+            new_state.set(Int(self.ORDER_SELLER_ACCEPTED)),
+            self.updateSellerOrderState(k, new_state),
+            output.set(EcommerceMessage.OK_ORDER_STATE)
+        )
+    @external
+    def sellerCancelOrder(self,
+                          k: abi.String,
+                          b: abi.Account, # Buyer Address
+                          license: abi.Asset,
+                          *,output: abi.String):
+        """Seller reject a specific order"""
+        new_state = abi.make(abi.Uint8)
+        return Seq(
+            Assert(self.orderExists(k), comment=EcommerceMessage.ERROR_ORDER_DONT_EXIST),
+            Assert(self.isSeller(),comment=EcommerceMessage.ERROR_USER_IS_NOT_SELLER),
+            Assert(self.addrIsSellerInOrder(k),comment=EcommerceMessage.ERROR_INVALID_SELLER_ADDR_ORDER),
+            self.refundBuyer(k),
+            output.set(EcommerceMessage.OK_ORDER_STATE)
+        )
+
+
+    @external
+    def buyerCompleteOrder(self,
+                           k: abi.String,
+                           s:abi.Account, # Seller Address
+                           *, output:abi.String):
+        """Buyer unlock their money for the seller to take after the order has been delivered."""
+        new_state = abi.make(abi.Uint8)
+        return Seq(
+            Assert(self.orderExists(k), comment=EcommerceMessage.ERROR_ORDER_DONT_EXIST),
+            Assert(self.addrIsBuyerInOrder(k) ,comment=EcommerceMessage.ERROR_INVALID_BUYER_ADDR_ORDER),
+            Assert(self.getOrderSellerState(k) == Int(self.ORDER_SELLER_ACCEPTED),comment=EcommerceMessage.ERROR_SELLER_NO_ACCEPTED_ORDER),
+            self.payoutSeller(k),
+            output.set(EcommerceMessage.OK_ORDER_STATE)
+        )
+
+    @external
+    def buyerCancelOrder(self,
+                         k: abi.String,
+                         *,output: abi.String):
+        """Buyer cancel(or if the seller already accepted it, make a request) for a specific order """
+        new_state = abi.make(abi.Uint8)
+        return Seq(
+            Assert(self.orderExists(k), comment=EcommerceMessage.ERROR_ORDER_DONT_EXIST),
+            Assert(self.addrIsBuyerInOrder(k) ,comment=EcommerceMessage.ERROR_INVALID_BUYER_ADDR_ORDER),
+            new_state.set(Int(self.ORDER_BUYER_CANCEL)),
+            self.updateBuyerOrderState(k,new_state),
+            output.set(EcommerceMessage.OK_ORDER_STATE)
         )

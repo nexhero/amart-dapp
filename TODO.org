@@ -50,9 +50,9 @@ Check if the sender is a seller account
 ** DONE getAssetIndex
 ** DONE incrementBalanceAssetIndex
 ** DONE decrementBalanceAssetIndex
-** [?] CountOrdersIncrement
+** DONE CountOrdersIncrement
 Increment the count for current active orders
-** [?] CountORdersDecrement
+** DONE CountORdersDecrement
 Decrement the count for current active orders
 ** DONE OrderExists
 Check if the order already exist
@@ -60,9 +60,9 @@ Check if the order already exist
 Create a new order box
 ** [?] DeleteBoxOrder
 Delete an order box
-** [?] AddrIsBuyerInOrder
+** DONE AddrIsBuyerInOrder
 Check if the sender is the buyer address for the order
-** [?] AddrIsSellerInOrder
+** DONE AddrIsSellerInOrder
 Check if the sender is the seller address for the order
 ** [?] SendStblCoinTo
 Generic function to send stable coins or the rewards tokens to an address
@@ -94,13 +94,11 @@ Set the time for auto-processing orders
 
 * Buyer
 ** DONE payOrder
-** TODO CompletedOrder
-** TODO CanceledOrder
-** TODO RequestCancelOrder
+** DONE CompletedOrder
+** TODO CancelOrder
 
 * Seller
 ** DONE payLicense
-** TODO CompletedOrder
-** TODO AcceptedOrder
-** TODO RejectedOrder
-** TODO CanceledOrder
+** TODO CompleteOrder
+** DONE AcceptedOrder
+** DONE CancelOrder

@@ -13,7 +13,7 @@ from beaker import client, sandbox
 from beaker.client.application_client import ApplicationClient
 from pyteal import *
 from algosdk import encoding
-from .contract import Ecommerce
+from .contract import Ecommerce, EcommerceMessage as EM
 
 algod_client  = sandbox.get_algod_client()
 
@@ -167,7 +167,7 @@ def test_seller_buy_license(seller_client:ApplicationClient,al):
             app_client.get_sender(),
             sp,
             app_client.app_addr,
-            Ecommerce._seller_cost
+            int(4000)
         ),
         signer = app_client.get_signer()
     )
@@ -178,7 +178,8 @@ def test_seller_buy_license(seller_client:ApplicationClient,al):
         p =ptxn,
         a = int(al)
     )
-    assert r.return_value == "payment_license_successfull", "Unable to pay license"
+    print(r.return_value)
+    assert r.return_value == EM.OK_PAYMENT_SUCCESSFULL, "Unable to pay license"
 
 def test_seller_re_buy_license(seller_client:ApplicationClient,al):
     app_client = seller_client
@@ -249,7 +250,37 @@ def test_buyer_pay_order_usdt(buyer_client:ApplicationClient,usdt):
 
     print(f"Buyer paid with usdt order::{r.return_value}")
 
+def test_buyer_check_balance_usdt(buyer_client:ApplicationClient,usdt):
+    app_client =  buyer_client
+    sp = algod_client.suggested_params()
+    r = app_client.call(
+        Ecommerce.checkUserBalance,
+        a = int(usdt)
+    )
+    print(f"Buyer usdc balance:{r.return_value}")
+
 def test_admin_create_order_usdc(admin_client,usdc):
+        app_client = admin_client
+
+        o = {
+            "seller": "TP7FTYCJRG6VDD4EJHHFTP7K5HLCTSY4EPRDHD2LQH7HG6OPCE5ZZMLD4E",
+            "buyer":"WBPK76F6U2VYPSUDHSNV3BFVYOMXP4LXM32UG7PFTS7ENEOVVNQZ576RHE",
+            "amount":100000,
+            "token":int(usdc),
+            "seller_state":0,
+            "buyer_state":0
+        }
+        r = app_client.call(
+            Ecommerce.createOrder,
+            k="order_1",
+            order = o,
+            nft_observer = 15,
+            boxes=[[app_client.app_id, "order_1"]]
+        )
+        # assert r.return_value == "new_order_created", "The order already exist"
+        print(f"Admin places the order: {r.return_value}")
+
+def test_admin_create_duplicated_order_usdc(admin_client,usdc):
         app_client = admin_client
 
         o = {
@@ -261,47 +292,42 @@ def test_admin_create_order_usdc(admin_client,usdc):
             "buyer_state":0
         }
         r = app_client.call(
-            Ecommerce.createOrder,
-            id="order_1",
-            order = o,
-            nft_observer = 15,
-            boxes=[[app_client.app_id, "order_1"]]
-        )
-        # assert r.return_value == "new_order_created", "The order already exist"
-        print(f"Admin places the order: {r.return_value}")
-def test_admin_get_order_usdc(admin_client,usdc):
-        app_client = admin_client
-
-        # record_codec =  ABIType.from_string(str(Ecommerce.Order.type_spec()))
-        r = app_client.call(
-            Ecommerce.getOrder,
-            id="order_2",
-            boxes=[[app_client.app_id, "order_2"]]
-        )
-        # order = record_codec.decode(r.return_value)
-        # print(f"Failed to place the order: {Order}")
-        print(r.return_value)
-
-def test_admin_create_duplicated_order_usdc(admin_client,usdc):
-        app_client = admin_client
-
-        o = {
-            "seller":"WBPK76F6U2VYPSUDHSNV3BFVYOMXP4LXM32UG7PFTS7ENEOVVNQZ576RHE",
-            "buyer": "TP7FTYCJRG6VDD4EJHHFTP7K5HLCTSY4EPRDHD2LQH7HG6OPCE5ZZMLD4E",
-            "amount":1000,
-            "token":int(usdc),
-            "seller_state":1,
-            "buyer_state":0
-        }
-        r = app_client.call(
             Ecommerce.newOrder,
-            id="order_2",
+            k="order_2",
             order = o,
             boxes=[[app_client.app_id, "order_2"]]
         )
         assert r.return_value == "order_already_exist", "The order already exist"
         print(f"Failed to place the order: {r.return_value}")
+def test_seller_accept_order_usdc(seller_client, usdc,al):
+        app_client = seller_client
 
+        # "seller": "TP7FTYCJRG6VDD4EJHHFTP7K5HLCTSY4EPRDHD2LQH7HG6OPCE5ZZMLD4E",
+
+        r = app_client.call(
+            Ecommerce.sellerAcceptOrder,
+            k="order_1",
+            license = int(al),
+
+            boxes=[[app_client.app_id, "order_1"]]
+        )
+        # assert r.return_value == "new_order_created", "The order already exist"
+        print(f"Return Value: {r.return_value}")
+
+def test_seller_cancel_order_usdc(seller_client,buyer_client, usdc,al):
+        app_client = seller_client
+        buyer_client = buyer_client
+        # "seller": "TP7FTYCJRG6VDD4EJHHFTP7K5HLCTSY4EPRDHD2LQH7HG6OPCE5ZZMLD4E",
+
+        r = app_client.call(
+            Ecommerce.sellerCancelOrder,
+            k="order_1",
+            license = int(al),
+            b = buyer_client.get_sender(),
+            boxes=[[app_client.app_id, "order_1"]]
+        )
+
+        print(f"Return Value: {r.return_value}")
 def test_seller_is_seller(seller_client, usdc,al):
     app_client = seller_client
 
@@ -316,9 +342,19 @@ def test_seller_fake_seller(buyer_client, usdc,al):
     app_client = buyer_client
 
     r = app_client.call(
-        Ecommerce.sellerTakeOrder,
+        Ecommerce.sellerAcceptOrder,
         license = int(al)
     )
 
     assert r.return_value != 1, "Address is not a faker seller"
     print(f"Return Value {r.return_value}")
+def test_buyer_payout_order_usdc(buyer_client,seller_client, usdc,al):
+        app_client = buyer_client
+        seller_client = seller_client
+        r = app_client.call(
+            Ecommerce.buyerCompleteOrder,
+            k="order_1",
+            s = "TP7FTYCJRG6VDD4EJHHFTP7K5HLCTSY4EPRDHD2LQH7HG6OPCE5ZZMLD4E",
+            boxes=[[app_client.app_id, "order_1"]],
+        )
+        print(f"Return Value: {r.return_value}")
