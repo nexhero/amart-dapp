@@ -212,13 +212,14 @@ class Ecommerce(Application):
     def decrementUserBalance(self, addr: abi.Address, amount: abi.Uint64, token: abi.Uint64):
         """Decrement the user balance for a token"""
         current_balance = abi.make(abi.Uint64)
+        new_balance = abi.make(abi.Uint64)
         k = abi.make(abi.Uint8)
         return Seq(
             k.set(self.getAssetIndex(token)),
             Assert(amount.get() <= self.user_balance[k][addr.get()]),
             current_balance.set(self.user_balance[k][addr.get()]),
-            current_balance.set(current_balance.get() - amount.get()),
-            self.user_balance[k][addr.get()].set(current_balance.get()),
+            new_balance.set(current_balance.get() - amount.get()),
+            self.user_balance[k][addr.get()].set(new_balance.get()),
             Return(self.user_balance[k][addr.get()])
         )
     @internal(TealType.uint64)
@@ -228,7 +229,7 @@ class Ecommerce(Application):
         k = abi.make(abi.Uint8)
         return Seq(
             k.set(self.getAssetIndex(token)),
-            Assert(amount.get() <= self.earning[k]),
+            Assert(amount.get() <= self.earning[k], comment=EcommerceMessage.ERROR_NO_FUNDS),
             current_balance.set(self.earning[k]),
             current_balance.set(current_balance.get() - amount.get()),
             self.earning[k].set(current_balance.get()),
@@ -448,6 +449,7 @@ class Ecommerce(Application):
         deposit = abi.make(abi.Uint64)
         addr = abi.make(abi.Address)
         r = abi.make(abi.Uint64)  # the increment function has a return value
+        earning = abi.make(abi.Uint64)  # Junk variable
         return Seq(
             Assert(self.orderExists(k), comment=EcommerceMessage.ERROR_ORDER_DONT_EXIST),
             (o := Ecommerce.Order()).decode(self.order_records[k.get()].get()),
@@ -457,6 +459,7 @@ class Ecommerce(Application):
             commission.set(self.calcCommission(amount)),
             deposit.set(amount.get()-commission.get()),
             r.set(self.incrementUserBalance(addr, deposit, t)),
+            earning.set(self.incrementBalanceAssetIndex(commission, t)),
             self.deleteBoxOrder(k)
 
         )
@@ -510,7 +513,6 @@ class Ecommerce(Application):
     def addFundsEarning(self,
                         att: abi.AssetTransferTransaction,
                         token: abi.Asset,
-
                         *, output: abi.Uint64):
         """Administrator add funds to the earning balance."""
         token_id = abi.make(abi.Uint64)
@@ -622,7 +624,6 @@ class Ecommerce(Application):
     def createOrder(self,
                     k: abi.String,
                     order: Order,
-                    nft_observer: abi.Asset,
                     *, output: abi.String):
         """An observer watch for a payment transaction, validate and create the order"""
         return Seq(
@@ -639,7 +640,6 @@ class Ecommerce(Application):
     @external
     def adminRefundBuyer(self,
                          k: abi.String,
-                         b: abi.Account,  # Buyer address
                          *, output: abi.String):
         """ Administrator refund token to buyer address"""
         return Seq(
@@ -651,15 +651,12 @@ class Ecommerce(Application):
                 comment=EcommerceMessage.ERROR_INVALID_CREDENTIALS,
             ),
             Assert(self.orderExists(k), comment=EcommerceMessage.ERROR_ORDER_DONT_EXIST),
-            Assert(self.addrIsBuyerInOrder(k), comment=EcommerceMessage.ERROR_INVALID_BUYER_ADDR_ORDER),
-            Assert(self.getOrderSellerState(k) == Int(self.ORDER_SELLER_ACCEPTED), comment=EcommerceMessage.ERROR_SELLER_NO_ACCEPTED_ORDER),
             self.refundBuyer(k),
-            output.set(EcommerceMessage.OK_PAYOUT_SELLER)
+            output.set(EcommerceMessage.OK_PAYMENT_SUCCESSFULL)
         )
     @external
     def adminPayoutSeller(self,
                           k: abi.String,
-                          s: abi.Account,
                           *, output: abi.String):
         """ Administrator payout to the seller account."""
         return Seq(
@@ -675,7 +672,9 @@ class Ecommerce(Application):
         )
 
     @external(authorize=Authorize.only(Global.creator_address()))
-    def setCommisionFees(self, v: abi.Uint64, *, output: abi.Uint64):
+    def setCommisionFees(self,
+                         v: abi.Uint64,
+                         *, output: abi.Uint64):
         """Administrator update the commission value"""
         return Seq(
             self.commission_fees.set(v.get()),
@@ -683,7 +682,9 @@ class Ecommerce(Application):
         )
 
     @external(authorize=Authorize.only(Global.creator_address()))
-    def setLicensePrice(self, v: abi.Uint64, *, output: abi.Uint64):
+    def setLicensePrice(self,
+                        v: abi.Uint64,
+                        *, output: abi.Uint64):
         """Administrator update the price for nft"""
         return Seq(
             self.license_price.set(v.get()),
@@ -691,7 +692,9 @@ class Ecommerce(Application):
         )
 
     @external(authorize=Authorize.only(Global.creator_address()))
-    def setObserverFees(self, v: abi.Uint64, *, output: abi.Uint64):
+    def setObserverFees(self,
+                        v: abi.Uint64,
+                        *, output: abi.Uint64):
         """Administrator update the fees that user paid for making request """
         return Seq(
             self.request_fees.set(v.get()),
@@ -782,7 +785,9 @@ class Ecommerce(Application):
             output.set(EcommerceMessage.OK_PAYMENT_SUCCESSFULL)
         )
     @external(read_only=True)
-    def checkUserBalance(self, a: abi.Asset, *, output: abi.Uint64):
+    def checkUserBalance(self,
+                         a: abi.Asset,
+                         *, output: abi.Uint64):
         a_id = abi.make(abi.Uint64)
         k = abi.make(abi.Uint8)
         return Seq(
@@ -794,7 +799,6 @@ class Ecommerce(Application):
     @external
     def sellerAcceptOrder(self,
                           k: abi.String,
-                          license: abi.Asset,
                           *, output: abi.String):
         """Seller update state to be accepted for a specific order"""
         new_state = abi.make(abi.Uint8)
@@ -809,8 +813,6 @@ class Ecommerce(Application):
     @external
     def sellerCancelOrder(self,
                           k: abi.String,
-                          b: abi.Account,  # Buyer Address
-                          license: abi.Asset,
                           *, output: abi.String):
         """Seller reject a specific order"""
         return Seq(
@@ -825,7 +827,6 @@ class Ecommerce(Application):
     @external
     def buyerCompleteOrder(self,
                            k: abi.String,
-                           s: abi.Account,  # Seller Address
                            *, output: abi.String):
         """Buyer unlock their money for the seller to take after the order has been delivered."""
         return Seq(
@@ -848,4 +849,29 @@ class Ecommerce(Application):
             new_state.set(Int(self.ORDER_BUYER_CANCEL)),
             self.updateBuyerOrderState(k, new_state),
             output.set(EcommerceMessage.OK_ORDER_STATE)
+        )
+    @external
+    def userWithdraw(self,
+                     t: abi.Asset,
+                     *, output: abi.Uint64):
+        """User withdraw tokens"""
+        token_index = abi.make(abi.Uint8)
+        token_id = abi.make(abi.Uint64)
+        balance = abi.make(abi.Uint64)
+        addr = abi.make(abi.Address)
+
+        return Seq(
+            addr.set(Txn.sender()),
+            token_id.set(t.asset_id()),
+            token_index.set(self.getAssetIndex(token_id)),
+            balance.set(self.user_balance[token_index]),
+            Assert(balance.get() >= Int(0), comment=EcommerceMessage.ERROR_NO_FUNDS),
+            self.sendStblCoinTo(
+                Txn.sender(),
+                balance.get(),
+                token_id.get(),
+                Bytes("User withdraw")
+            ),
+            output.set(self.decrementUserBalance(addr, balance, token_id)),
+
         )

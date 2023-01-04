@@ -31,6 +31,12 @@ def pytest_addoption(parser):
         default=[],
         help= "Application license"
     )
+    parser.addoption(
+        "--oni",
+        action="append",
+        default=[],
+        help= "Application observer license"
+    )
 
 def pytest_generate_tests(metafunc):
     if "usdc" in metafunc.fixturenames:
@@ -43,3 +49,5 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize("appaddr", metafunc.config.getoption("appaddr"))
     if "al" in metafunc.fixturenames:
         metafunc.parametrize("al", metafunc.config.getoption("al"))
+    if "oni" in metafunc.fixturenames:
+        metafunc.parametrize("oni", metafunc.config.getoption("oni"))

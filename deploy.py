@@ -60,9 +60,11 @@ def main(tokens):
         )
         admin_client.call(Ecommerce.addToken, a = t)
 
+    app_state = admin_client.get_application_state()
     print(f"app_id {app_id}")
     print(f"app_addr {app_addr}")
     print(f"app_license {app_license.return_value}")
+    print(f"app_observer {app_state['oni']}")
 
 
 if __name__ == "__main__" :

@@ -21,3 +21,4 @@ class EcommerceMessage:
     OK_ORDER_ACCEPTED = "You have accepted order"
     OK_ORDER_STATE = "You have updated the order state"
     OK_PAYOUT_SELLER = "Order's tokens transfered to seller"
+    OK_WITHDRAW = "Withdraw successfull"

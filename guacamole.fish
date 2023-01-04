@@ -5,7 +5,7 @@ set -g cache "$temp/cache"              # Cache file
 set -g smartcontract "$temp/smartcontract"
 set -g tokens "$temp/tokens"
 set -g s "sandbox/./sandbox"
-set -g ptest smartcontract/test_calls.py
+set -g ptest smartcontract/test/test_calls.py
 # DEFINE accounts type based in the index
 set -g ADMIN 1
 set -g SELLER 2
@@ -190,9 +190,9 @@ function runTestFunctions
     clear
     title "-- Testing function::$f"
     if test $f = 'all'
-        pytest -q --usdc=$t[1] --usdt=$t[2] --appid=$app[1] --appaddr=$app[2] --al=$app[3] $ptest -s
+        exec pytest -q --usdc=$t[1] --usdt=$t[2] --appid=$app[1] --appaddr=$app[2] --al=$app[3] --oni=$app[4] $ptest -s
     else
-        pytest -q --usdc=$t[1] --usdt=$t[2] --appid=$app[1] --appaddr=$app[2] --al=$app[3] $ptest::$f -s
+        pytest -q --usdc=$t[1] --usdt=$t[2] --appid=$app[1] --appaddr=$app[2] --al=$app[3] --oni=$app[4] $ptest::$f -s
     end
     echo ""
     echo "Test completed, press any key to continue..."
@@ -236,7 +236,7 @@ function subMenuResetApp
     if test -e $tokens
         rm $tokens
     end
-    
+
     clear
     resetSandbox
     clear
