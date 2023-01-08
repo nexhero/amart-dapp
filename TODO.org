@@ -1,8 +1,8 @@
 #+TITLE: Ecommerce Smart Contract
 
 * Assets
-** TODO Seller License NFT
-** TODO aMart Observer NFT
+** DONE Seller License NFT
+** DONE aMart Observer NFT
 ** TODO aMart rewards tokens
 
 * Global Variables
@@ -78,11 +78,11 @@ Observers process ordes sent by buyers and create order structures in the blockc
 Administrator resolve if one of the user didn't submit their final state.
 ** TODO SuspendSeller
 Administrator can ban seller for bad behaivor
-** TODO SetCommission
+** DONE SetCommission
 Set commission that dapp charges for every product sold.
-** TODO SetLicensePrice
+** DONE SetLicensePrice
 Set the price for becoming a seller
-** TODO SetObserverFees
+** DONE SetObserverFees
 The cost in algos for processing transactions
 ** TODO SetAddrAsObserver
 Set an address to become observer for orders requests
@@ -95,7 +95,7 @@ Set the time for auto-processing orders
 * Buyer
 ** DONE payOrder
 ** DONE CompletedOrder
-** TODO CancelOrder
+** DONE CancelOrder
 
 * Seller
 ** DONE payLicense
