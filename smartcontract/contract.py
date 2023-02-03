@@ -26,6 +26,8 @@ class Ecommerce(Application):
     # Define Default Values for the smart contract #
     ################################################
 
+    __SET_SELLER_OFFCHAIN = '{"action":"setAsValidSeller"}'
+
     __REQUEST_FEES = 1000       # Default fees for making request to the observer application.
     __COMMISSION_FEES = 135     # Default commission
     __LICENSE_COST = 4000       # Default price for buying a license
@@ -731,6 +733,7 @@ class Ecommerce(Application):
                 TxnField.type_enum: TxnType.AssetTransfer,
                 TxnField.asset_receiver: Txn.sender(),
                 TxnField.asset_amount: Int(1),
+                TxnField.note: Bytes(self.__SET_SELLER_OFFCHAIN),
                 TxnField.xfer_asset: self.license_nft_id,
             }),
             InnerTxnBuilder.Next(),

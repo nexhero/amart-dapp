@@ -57,12 +57,23 @@ def buyer_client(appid) -> ApplicationClient:
 
 @pytest.fixture(autouse=True)
 def run_around_tests(admin_client, buyer_client, seller_client):
+
+    algod_client = algod.AlgodClient(
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "http://localhost:4001"
+    )
+
+    sp = algod_client.suggested_params()
+    block_info = algod_client.block_info(sp.first)
+
     padmincall = (admin_client.client.account_info(admin_client.get_sender()))
     psellercall = (seller_client.client.account_info(seller_client.get_sender()))
     pbuyercall = (buyer_client.client.account_info(buyer_client.get_sender()))
 
     yield
+
     print("\n-----------------------------------")
+    print(f" Start in round: {block_info['block']['rnd']}")
     poadmincall = (admin_client.client.account_info(admin_client.get_sender()))
     print(f"Balance pre admin call  {padmincall['amount']}")
     print(f"Balance post admin call {poadmincall['amount']}")
@@ -75,9 +86,14 @@ def run_around_tests(admin_client, buyer_client, seller_client):
     print(f"Cost: {psellercall['amount'] - posellercall['amount']}")
 
     pobuyercall = (buyer_client.client.account_info(buyer_client.get_sender()))
+
+    sp = algod_client.suggested_params()
+    block_info = algod_client.block_info(sp.first)
+
     print(f"\nBalance pre seller call  {pbuyercall['amount']}")
     print(f"Balance post seller call {pobuyercall['amount']}")
     print(f"Cost: {pbuyercall['amount'] - pobuyercall['amount']}")
+    print(f"Finished in round: {block_info['block']['rnd']}")
     print("\n-----------------------------------\n")
 
 
@@ -177,6 +193,7 @@ def test_seller_buy_license_incorrect_amount(seller_client: ApplicationClient):
 
 
 def test_seller_buy_license(seller_client: ApplicationClient):
+    print("Running test for Buying License")
     app_client = seller_client
     lni = int(app_client.get_application_state()["lni"])
     amount = int(app_client.get_application_state()["lp"])
