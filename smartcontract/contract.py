@@ -19,18 +19,20 @@ from beaker.lib.storage import Mapping, MapElement
 class Ecommerce(Application):
 
     """
-    This smart contract works as escrow between buyer and sellers, is the main point entrance to make request
-    to the oracle."""
+    This smart contract works as escrow between buyer and sellers. To complete any action
+    (cancel,refund,payment) both user must agree, on special cases, the administrator
+    can process those transacions, but the system is design to be auto-reponsible.
+    """
 
     ################################################
     # Define Default Values for the smart contract #
     ################################################
 
-    __SET_SELLER_OFFCHAIN = '{"action":"setAsValidSeller"}'
+    __SET_SELLER_OFFCHAIN = '{"action":"setAsValidSeller"}' # Actions to write in the note for paying the license
 
     __REQUEST_FEES = 1000       # Default fees for making request to the observer application.
-    __COMMISSION_FEES = 135     # Default commission
-    __LICENSE_COST = 4000       # Default price for buying a license
+    __COMMISSION_FEES = 135     # Default commission, this mean 1.35
+    __LICENSE_COST = 4000       # Default price for buying a license in micro algos
 
     ##########################################
     # Assets that smart contract will manage #
@@ -64,7 +66,7 @@ class Ecommerce(Application):
         """
             Define the order structure, this store the current business for the buyer.
             For each order, buyer creates a box and only seller, buyer and the admin can modify the box
-            """
+        """
         seller: abi.Field[abi.Address]     # The seller address
         buyer: abi.Field[abi.Address]      # The buyer address
         amount: abi.Field[abi.Uint64]      # the total tokens deposited by the buyer
@@ -185,7 +187,7 @@ class Ecommerce(Application):
 
     @internal(TealType.uint64)
     def incrementUserBalance(self, addr: abi.Address, amount: abi.Uint64, token: abi.Uint64):
-        """Increment the temp balance for a buyer addr"""
+        """Increment user's balance for a specific token"""
         current_balance = abi.make(abi.Uint64)
         k = abi.make(abi.Uint8)
 
@@ -200,7 +202,9 @@ class Ecommerce(Application):
 
     @internal(TealType.uint64)
     def incrementBalanceAssetIndex(self, amount: abi.Uint64, token: abi.Uint64):
-        """Increment the earning's balance for a token"""
+        """
+        Increment the earning balance that smartcontract made for a specific token.
+        """
         current_balance = abi.make(abi.Uint64)
         k = abi.make(abi.Uint8)
         return Seq(
@@ -212,7 +216,7 @@ class Ecommerce(Application):
 
     @internal(TealType.uint64)
     def decrementUserBalance(self, addr: abi.Address, amount: abi.Uint64, token: abi.Uint64):
-        """Decrement the user balance for a token"""
+        """Decrement the user's (seller) balance for a token"""
         current_balance = abi.make(abi.Uint64)
         new_balance = abi.make(abi.Uint64)
         k = abi.make(abi.Uint8)
@@ -226,7 +230,7 @@ class Ecommerce(Application):
         )
     @internal(TealType.uint64)
     def decrementBalanceAssetIndex(self, amount: abi.Uint64, token: abi.Uint64):
-        """Decrement the earning's balance for a token"""
+        """Decrement the earning balance for the smartcontract"""
         current_balance = abi.make(abi.Uint64)
         k = abi.make(abi.Uint8)
         return Seq(
@@ -240,7 +244,12 @@ class Ecommerce(Application):
 
     @internal(TealType.uint64)
     def isObserver(self):
-        """Check if the sender is an observer"""
+        """
+        Check if the sender is an observer.
+        **Observer** are address that are identifed in the backend as admin-user
+        by NFTs, they are able to create boxes in the smartcontract, and sync order status between
+        blockchain and the server database.
+        """
         r = AssetHolding.balance(Txn.sender(), self.observer_nft_id)
         return Seq(
             r,                  # Get the balance for the observer nft
@@ -252,6 +261,7 @@ class Ecommerce(Application):
                 Return(Int(0))
             )
         )
+
     @internal(TealType.uint64)
     def isAdmin(self):
         """Check if the sender is administrator"""
@@ -267,7 +277,9 @@ class Ecommerce(Application):
         )
     @internal(TealType.uint64)
     def isSeller(self):
-        """Check if the address is a seller account."""
+        """
+        Check if the sender is a selle address by seeking the Nft in the assets
+        """
         r = AssetHolding.balance(Txn.sender(), self.license_nft_id)
         return Seq(
             r,
@@ -279,26 +291,33 @@ class Ecommerce(Application):
                 Return(Int(0))
             )
         )
+
     @internal(TealType.none)
     def countOrderIncrement(self):
         """Increment the count active orders"""
         return Seq(
             self.active_box_orders.increment(Int(1))
         )
+
     @internal(TealType.none)
     def countOrderDecrement(self):
         """Decrement the count active orders"""
         return Seq(
             self.active_box_orders.decrement(Int(1))
         )
+
     @internal(TealType.uint64)
     def orderExists(self, k: abi.String):
-        """Check if the box for a specific order id exists"""
+        """
+        Check for the box key and return True if the order already exists, otherwise return false
+        """
         return MapElement(k.get(), self.Order).exists()
 
     @internal(TealType.none)
     def createBoxOrder(self, k: abi.String, data: Order):
-        """Try to create an order, if the order key already exist exit program"""
+        """
+        Try to create an order, if the order key exist exit program
+        """
         return Seq(
             Assert(self.orderExists(k) == Int(0), comment=EcommerceMessage.ERROR_ORDER_EXIST),
             self.order_records[k.get()].set(data),
@@ -316,7 +335,10 @@ class Ecommerce(Application):
         )
     @internal(TealType.uint64)
     def addrIsBuyerInOrder(self, k: abi.String):
-        """Check if the sender is the buyer for a specific order"""
+        """
+        Check if the sender is the buyer for the box key(k) returning True,
+        otherwise False
+        """
         addr = abi.make(abi.Address)
         return Seq(
             Assert(self.orderExists(k), comment=EcommerceMessage.ERROR_ORDER_DONT_EXIST),
@@ -332,8 +354,10 @@ class Ecommerce(Application):
         )
     @internal(TealType.uint64)
     def addrIsSellerInOrder(self, k: abi.String):
-        """Check if the sender is the seller for a specific order"""
-
+        """
+        Check if the sender is the seller for the box key(k), returning True,
+        otherwise False
+        """
         addr = abi.make(abi.Address)
         return Seq(
             Assert(self.orderExists(k), comment=EcommerceMessage.ERROR_ORDER_DONT_EXIST),
@@ -347,9 +371,14 @@ class Ecommerce(Application):
                 Return(Int(0))
             )
         )
+
     @internal(TealType.uint64)
     def getOrderSellerState(self, k: abi.String):
-        """Get the current seller's state for the order."""
+        """
+        Get the current seller's state for the order in the box k.
+        - ORDER_SELLER_PENDING
+        - ORDER_SELLER_ACCEPTED
+        """
         state = abi.make(abi.Uint8)
         return Seq(
             Assert(self.orderExists(k), comment=EcommerceMessage.ERROR_ORDER_DONT_EXIST),
@@ -364,7 +393,10 @@ class Ecommerce(Application):
                        amount,
                        token,
                        msg):
-        """Send any of the stable coind holded by the smart contract"""
+        """
+        Is a builder asset transaction to send any of the stable coin
+        holded by the smart contract.
+        """
         # TODO: return the transaction id
         return Seq(
             InnerTxnBuilder.Begin(),
@@ -379,7 +411,13 @@ class Ecommerce(Application):
         )
     @internal(TealType.none)
     def updateSellerOrderState(self, k: abi.String, value: abi.Uint8):
-        """Seller update state"""
+        """
+        Set the seller's state for a box order.
+
+        TODO: Validate possibles state
+        - ORDER_SELLER_PENDING = 0
+        - ORDER_SELLER_ACCEPTED = 1
+        """
         seller = abi.make(abi.Address)
         buyer = abi.make(abi.Address)
         amount = abi.make(abi.Uint64)
@@ -407,7 +445,13 @@ class Ecommerce(Application):
 
     @internal(TealType.none)
     def updateBuyerOrderState(self, k: abi.String, value: abi.Uint8):
-        """Buyer update state"""
+        """
+        Set the buyer's state for a box order.
+
+        TODO: Validate possibles state
+        - ORDER_BUYER_POSTED = 0
+        - ORDER_BUYER_CANCEL = 1
+        """
         seller = abi.make(abi.Address)
         buyer = abi.make(abi.Address)
         amount = abi.make(abi.Uint64)
@@ -435,23 +479,30 @@ class Ecommerce(Application):
 
     @internal(TealType.uint64)
     def calcCommission(self, v: abi.Uint64):
+        """
+        Return the commission for the value
+        """
         r = ScratchVar(TealType.uint64)
 
         return Seq(
+            # INFO: By 10000 is able to use two decimal precision
             r.store((v.get() / Int(10000)) * self.commission_fees),
             Return(r.load())
         )
 
     @internal(TealType.none)
     def payoutSeller(self, k: abi.String):
-        """Payout to the seller"""
+        """
+        Move the tokens to the seller's balance,charge for the commission
+        then delete the box.
+        """
         t = abi.make(abi.Uint64)
         amount = abi.make(abi.Uint64)
         commission = abi.make(abi.Uint64)
         deposit = abi.make(abi.Uint64)
         addr = abi.make(abi.Address)
         r = abi.make(abi.Uint64)  # the increment function has a return value
-        earning = abi.make(abi.Uint64)  # Junk variable
+        earning = abi.make(abi.Uint64)  # Junk variable, only needed because incrementBalanceAsseetIndex return a value
         return Seq(
             Assert(self.orderExists(k), comment=EcommerceMessage.ERROR_ORDER_DONT_EXIST),
             (o := Ecommerce.Order()).decode(self.order_records[k.get()].get()),
@@ -467,7 +518,7 @@ class Ecommerce(Application):
         )
     @internal(TealType.none)
     def refundBuyer(self, k: abi.String):
-        """Refund token to the buyer user"""
+        """Refund token to the buyer user, then delete the box"""
         t = abi.make(abi.Uint64)
         amount = abi.make(abi.Uint64)
         addr = abi.make(abi.Address)
@@ -538,7 +589,7 @@ class Ecommerce(Application):
                          amount: abi.Uint64,
                          token: abi.Asset,
                          *, output: abi.Uint64):
-        """Administrator withdraw the earning to the creator"""
+        """Administrator withdraw the earning to the creator address"""
         token_id = abi.make(abi.Uint64)
         balance = abi.make(abi.Uint64)
         return Seq(
@@ -552,7 +603,6 @@ class Ecommerce(Application):
             ),
             output.set(balance.get())
         )
-
 
     @external(authorize=Authorize.only(Global.creator_address()))
     def setup(self,
@@ -606,7 +656,6 @@ class Ecommerce(Application):
                  a: abi.Asset,
                  *, output: abi.Uint64):
         """Enable new tokens for payment"""
-
 
         return Seq(
 
@@ -662,15 +711,15 @@ class Ecommerce(Application):
                           *, output: abi.String):
         """ Administrator payout to the seller account."""
         return Seq(
-          Assert(
-            Or(
-              self.isAdmin(),
-              self.isObserver()
+            Assert(
+                Or(
+                    self.isAdmin(),
+                    self.isObserver()
+                ),
+                comment=EcommerceMessage.ERROR_INVALID_CREDENTIALS,
             ),
-            comment=EcommerceMessage.ERROR_INVALID_CREDENTIALS,
-          ),
-          self.payoutSeller(k),
-          output.set(EcommerceMessage.OK_PAYOUT_SELLER)
+            self.payoutSeller(k),
+            output.set(EcommerceMessage.OK_PAYOUT_SELLER)
         )
 
     @external(authorize=Authorize.only(Global.creator_address()))
@@ -791,6 +840,10 @@ class Ecommerce(Application):
     def checkUserBalance(self,
                          a: abi.Asset,
                          *, output: abi.Uint64):
+        """
+        FIXME: Probably needs to be remove, has no utility
+        Check the sender balance
+        """
         a_id = abi.make(abi.Uint64)
         k = abi.make(abi.Uint8)
         return Seq(
@@ -826,7 +879,6 @@ class Ecommerce(Application):
             output.set(EcommerceMessage.OK_ORDER_STATE)
         )
 
-
     @external
     def buyerCompleteOrder(self,
                            k: abi.String,
@@ -844,7 +896,10 @@ class Ecommerce(Application):
     def buyerCancelOrder(self,
                          k: abi.String,
                          *, output: abi.String):
-        """Buyer cancel(or if the seller already accepted it, make a request) for a specific order """
+        """
+        Buyer cancel(or if the seller already accepted it, make a request) for a specific order.
+        TODO The request cancelation logic needs to be code, also for the moment there is no way to let the backend server knows
+        """
         new_state = abi.make(abi.Uint8)
         return Seq(
             Assert(self.orderExists(k), comment=EcommerceMessage.ERROR_ORDER_DONT_EXIST),
@@ -853,6 +908,7 @@ class Ecommerce(Application):
             self.updateBuyerOrderState(k, new_state),
             output.set(EcommerceMessage.OK_ORDER_STATE)
         )
+
     @external
     def userWithdraw(self,
                      t: abi.Asset,
@@ -873,8 +929,7 @@ class Ecommerce(Application):
                 Txn.sender(),
                 balance.get(),
                 token_id.get(),
-                Bytes("User withdraw")
+                Bytes("User withdraw") # TODO Create a note action
             ),
             output.set(self.decrementUserBalance(addr, balance, token_id)),
-
         )
